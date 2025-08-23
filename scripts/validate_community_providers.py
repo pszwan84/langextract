@@ -16,10 +16,10 @@
 """Validation for COMMUNITY_PROVIDERS.md plugin registry table."""
 
 import os
-import re
-import sys
 from pathlib import Path
+import re
 import re as regex_module
+import sys
 from typing import Dict, List, Tuple
 
 HEADER_ANCHOR = '| Plugin Name | PyPI Package |'
@@ -35,7 +35,9 @@ GH_MULTI_USER = rf'^{GH_USER_LINK}(,\s*{GH_USER_LINK})*$'
 GH_REPO_LINK = rf'^\[[^\]]+\]\(https://github\.com/{GH_NAME}/{GH_REPO}\)$'
 
 # Issue link must point to LangExtract repository (issues only)
-LANGEXTRACT_ISSUE_LINK = r'^\[[^\]]+\]\(https://github\.com/google/langextract/issues/\d+\)$'
+LANGEXTRACT_ISSUE_LINK = (
+    r'^\[[^\]]+\]\(https://github\.com/google/langextract/issues/\d+\)$'
+)
 
 # PEP 503-ish normalized name (loose): lowercase letters/digits with - _ . separators
 PYPI_NORMALIZED = r'`[a-z0-9]([\-_.]?[a-z0-9]+)*`'
@@ -79,7 +81,8 @@ def validate(filepath: Path) -> bool:
     return False
   if end < 0:
     errors.append(
-        'Could not find end marker: <!-- ADD NEW PLUGINS ABOVE THIS LINE -->.')
+        'Could not find end marker: <!-- ADD NEW PLUGINS ABOVE THIS LINE -->.'
+    )
     print_report(errors, warnings)
     return False
 
@@ -94,7 +97,8 @@ def validate(filepath: Path) -> bool:
 
     if not raw.startswith('|') or not raw.endswith('|'):
       errors.append(
-          f"Line {i+1}: Not a valid table row (must start and end with '|').")
+          f"Line {i+1}: Not a valid table row (must start and end with '|')."
+      )
       continue
 
     cols = parse_row(raw)
@@ -110,17 +114,20 @@ def validate(filepath: Path) -> bool:
 
     if not re.fullmatch(PYPI_NORMALIZED, pypi):
       errors.append(
-          f'Line {i+1}: PyPI package must be backticked and normalized (e.g., `langextract-provider-foo`).'
+          f'Line {i+1}: PyPI package must be backticked and normalized (e.g.,'
+          ' `langextract-provider-foo`).'
       )
 
     if not re.fullmatch(GH_MULTI_USER, maint):
       errors.append(
           f'Line {i+1}: Maintainer must be one or more GitHub handles as links '
-          f'(e.g., [@alice](https://github.com/alice) or comma-separated).')
+          '(e.g., [@alice](https://github.com/alice) or comma-separated).'
+      )
 
     if not re.fullmatch(GH_REPO_LINK, repo):
       errors.append(
-          f'Line {i+1}: GitHub Repo must be a Markdown link to a GitHub repository.'
+          f'Line {i+1}: GitHub Repo must be a Markdown link to a GitHub'
+          ' repository.'
       )
 
     if not desc or len(desc) < MIN_DESC_LEN:
@@ -133,7 +140,8 @@ def validate(filepath: Path) -> bool:
       errors.append(f'Line {i+1}: Issue Link is required.')
     elif not re.fullmatch(LANGEXTRACT_ISSUE_LINK, issue_link):
       errors.append(
-          f'Line {i+1}: Issue Link must point to a LangExtract issue (e.g., [#123](https://github.com/google/langextract/issues/123)).'
+          f'Line {i+1}: Issue Link must point to a LangExtract issue (e.g.,'
+          ' [#123](https://github.com/google/langextract/issues/123)).'
       )
 
     rows.append({
@@ -146,11 +154,11 @@ def validate(filepath: Path) -> bool:
   for r in rows:
     pn_key = r['plugin'].strip().casefold()
     pk_key = normalize_pypi(r['pypi']) if r['pypi'] else None
-    
+
     if pn_key in seen_names:
       errors.append(f"Line {r['line']}: Duplicate Plugin Name '{r['plugin']}'.")
     seen_names.add(pn_key)
-    
+
     if pk_key and pk_key in seen_pkgs:
       errors.append(f"Line {r['line']}: Duplicate PyPI Package '{r['pypi']}'.")
     if pk_key:
@@ -164,7 +172,8 @@ def validate(filepath: Path) -> bool:
   # Guardrail: discourage leaving only the example entry
   if len(rows) == 1 and rows[0]['plugin'].lower().startswith('example'):
     warnings.append(
-        'The registry currently contains only the example row. Add real providers above the marker.'
+        'The registry currently contains only the example row. Add real'
+        ' providers above the marker.'
     )
 
   print_report(errors, warnings)
