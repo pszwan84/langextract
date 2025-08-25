@@ -242,11 +242,10 @@ def is_url(text: str) -> bool:
 
   try:
     result = urlparse.urlparse(text)
-    if not (result.scheme in ('http', 'https') and result.netloc):
-      return False
-
     hostname = result.hostname
-    if not hostname:
+
+    # Must have valid scheme, netloc, and hostname
+    if not (result.scheme in ('http', 'https') and result.netloc and hostname):
       return False
 
     # Accept IPs, localhost, or domains with dots
