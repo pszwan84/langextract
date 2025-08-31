@@ -24,5 +24,11 @@ keywords:
   - machine-learning
   - python
 license: Apache-2.0
-version: 1.0.3
-date-released: 2025-07-30
+version: 1.0.9
+date-released: 2025-08-31
+
+doi: "10.5281/zenodo.17015089"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.17015089"
+    description: "Concept DOI for LangExtract"
