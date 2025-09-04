@@ -18,6 +18,7 @@ import textwrap
 from unittest import mock
 
 from absl.testing import absltest
+from absl.testing import parameterized
 
 from langextract import prompting
 import langextract as lx
@@ -26,7 +27,7 @@ from langextract.core import types
 from langextract.providers import schemas
 
 
-class InitTest(absltest.TestCase):
+class InitTest(parameterized.TestCase):
   """Test cases for the main package functions."""
 
   @mock.patch.object(
@@ -453,6 +454,88 @@ class InitTest(absltest.TestCase):
             hasattr(lx.tokenizer, name),
             f"lx.tokenizer.{name} not accessible via compatibility shim",
         )
+
+  @parameterized.named_parameters(
+      dict(
+          testcase_name="show_progress_true_debug_false",
+          show_progress=True,
+          debug=False,
+          expected_progress_disabled=False,
+      ),
+      dict(
+          testcase_name="show_progress_false_debug_false",
+          show_progress=False,
+          debug=False,
+          expected_progress_disabled=True,
+      ),
+      dict(
+          testcase_name="show_progress_true_debug_true",
+          show_progress=True,
+          debug=True,
+          expected_progress_disabled=False,
+      ),
+      dict(
+          testcase_name="show_progress_false_debug_true",
+          show_progress=False,
+          debug=True,
+          expected_progress_disabled=True,
+      ),
+  )
+  @mock.patch("langextract.progress.create_extraction_progress_bar")
+  @mock.patch("langextract.extraction.factory.create_model")
+  def test_show_progress_controls_progress_bar(
+      self,
+      mock_create_model,
+      mock_progress,
+      show_progress,
+      debug,
+      expected_progress_disabled,
+  ):
+    """Test that show_progress parameter controls progress bar visibility."""
+    mock_model = mock.MagicMock()
+    mock_model.infer.return_value = [
+        [
+            types.ScoredOutput(
+                output='{"extractions": []}',
+                score=0.9,
+            )
+        ]
+    ]
+    mock_model.requires_fence_output = False
+    mock_create_model.return_value = mock_model
+
+    mock_progress_bar = mock.MagicMock()
+    mock_progress_bar.__iter__ = mock.MagicMock(
+        return_value=iter([mock.MagicMock()])
+    )
+    mock_progress.return_value = mock_progress_bar
+
+    mock_examples = [
+        lx.data.ExampleData(
+            text="Example text",
+            extractions=[
+                lx.data.Extraction(
+                    extraction_class="entity",
+                    extraction_text="example",
+                ),
+            ],
+        )
+    ]
+
+    lx.extract(
+        text_or_documents="test text",
+        prompt_description="extract entities",
+        examples=mock_examples,
+        api_key="test_key",
+        show_progress=show_progress,
+        debug=debug,
+    )
+
+    mock_progress.assert_called()
+    call_args = mock_progress.call_args
+    self.assertEqual(
+        call_args.kwargs.get("disable", False), expected_progress_disabled
+    )
 
 
 if __name__ == "__main__":

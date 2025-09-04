@@ -56,6 +56,7 @@ def extract(
     fetch_urls: bool = True,
     prompt_validation_level: pv.PromptValidationLevel = pv.PromptValidationLevel.WARNING,
     prompt_validation_strict: bool = False,
+    show_progress: bool = True,
 ) -> typing.Any:
   """Extracts structured information from text.
 
@@ -149,6 +150,7 @@ def extract(
         raises on failures. Defaults to WARNING.
       prompt_validation_strict: When True and prompt_validation_level is ERROR,
         raises on non-exact matches (MATCH_FUZZY, MATCH_LESSER). Defaults to False.
+      show_progress: Whether to show progress bar during extraction. Defaults to True.
 
   Returns:
       An AnnotatedDocument with the extracted information when input is a
@@ -326,6 +328,7 @@ def extract(
         additional_context=additional_context,
         debug=debug,
         extraction_passes=extraction_passes,
+        show_progress=show_progress,
         max_workers=max_workers,
         **alignment_kwargs,
     )
@@ -338,6 +341,7 @@ def extract(
         batch_length=batch_length,
         debug=debug,
         extraction_passes=extraction_passes,
+        show_progress=show_progress,
         max_workers=max_workers,
         **alignment_kwargs,
     )
