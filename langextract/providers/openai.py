@@ -35,7 +35,7 @@ from langextract.providers import router
     priority=patterns.OPENAI_PRIORITY,
 )
 @dataclasses.dataclass(init=False)
-class OpenAILanguageModel(base_model.BaseLanguageModel):
+class OpenAILanguageModel(base_model.BaseLanguageModel):  # pylint: disable=too-many-instance-attributes
   """Language model inference using OpenAI's API with structured output."""
 
   model_id: str = 'gpt-4o-mini'
@@ -51,12 +51,6 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
       default_factory=dict, repr=False, compare=False
   )
   _is_azure: bool = dataclasses.field(default=False, repr=False, compare=False)
-  _azure_endpoint: str | None = dataclasses.field(
-      default=None, repr=False, compare=False
-  )
-  _api_version: str | None = dataclasses.field(
-      default=None, repr=False, compare=False
-  )
 
   @property
   def requires_fence_output(self) -> bool:
@@ -101,20 +95,11 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
       ) from e
 
     self.model_id = model_id
-    # Allow env fallbacks for Azure/OpenAI
-    try:
-      import os as _os  # pylint: disable=import-outside-toplevel
-    except Exception:  # pragma: no cover
-      _os = None  # type: ignore
 
-    self.api_key = api_key or (
-        (_os.environ.get('AZURE_OPENAI_API_KEY') if _os else None)
-        or (_os.environ.get('OPENAI_API_KEY') if _os else None)
-    )
-    self.base_url = base_url or (
-        (_os.environ.get('AZURE_OPENAI_ENDPOINT') if _os else None)
-        or (_os.environ.get('OPENAI_BASE_URL') if _os else None)
-    )
+    # Explicit configuration only. Do not silently read credentials/endpoints
+    # from environment variables to avoid surprising behavior in tests/CI.
+    self.api_key = api_key
+    self.base_url = base_url
     self.organization = organization
     self.format_type = format_type
     self.temperature = temperature
@@ -125,51 +110,20 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
     self._lex_debug = False
     self._lex_debug_log: str | None = None
     try:
+      import os as _os  # pylint: disable=import-outside-toplevel
       self._lex_debug = bool(_os and _os.environ.get('LEX_DEBUG'))
       self._lex_debug_log = _os.environ.get('LEX_DEBUG_LOG') if _os else None
     except Exception:
       self._lex_debug = False
       self._lex_debug_log = None
 
-    # Built-in fallbacks by model_id so callers don't need to pass credentials every time
-    try:
-      mid = (model_id or '').lower()
-      if (
-          (not self.base_url)
-          or (not self.api_key)
-          or (not self.api_version and mid.startswith('gpt-4o'))
-      ):
-        # DashScope (Bailian) - OpenAI compatible
-        if mid.startswith('qwen3-'):
-          self.base_url = (
-              self.base_url
-              or 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-          )
-          self.api_key = self.api_key or 'your-key'
-        # Volcengine (Ark) - OpenAI compatible
-        elif mid.startswith('doubao'):
-          self.base_url = (
-              self.base_url or 'https://ark.cn-beijing.volces.com/api/v3'
-          )
-          self.api_key = self.api_key or 'your-key'
-        # Azure OpenAI (deployment name typically used as model_id)
-        elif mid.startswith('gpt-4o'):
-          self.base_url = self.base_url or 'https://coe0118.openai.azure.com/'
-          self.api_key = self.api_key or 'your-key'
-          # Default api-version for Azure
-          if not self.api_version:
-            self.api_version = 'your-version'
-    except Exception:
-      pass
-
-    # Emit debug info about resolved configuration (without leaking secrets)
     if self._lex_debug:
       try:
         dbg = {
-          'resolved_model_id': self.model_id,
-          'resolved_base_url': self.base_url,
-          'has_api_key': bool(self.api_key),
-          'api_version': self.api_version,
+            'resolved_model_id': self.model_id,
+            'resolved_base_url': self.base_url,
+            'has_api_key': bool(self.api_key),
+            'api_version': self.api_version,
         }
         msg = f'[langextract.openai] init: {dbg}'
         print(msg)
@@ -182,33 +136,18 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
     if not self.api_key:
       raise exceptions.InferenceConfigError('API key not provided.')
 
-    # Initialize the OpenAI client
-    # 仅当未显式提供非 Azure 的 base_url 时，才回退到 AZURE_OPENAI_ENDPOINT 判定
-    is_azure = False
-    if self.base_url and 'azure.com' in self.base_url:
-      is_azure = True
-    elif (
-        (not self.base_url) and _os and _os.environ.get('AZURE_OPENAI_ENDPOINT')
-    ):
-      is_azure = True
-
+    # Determine Azure mode ONLY when explicitly requested
+    is_azure_flag = bool(kwargs.get('is_azure', False))
+    azure_by_url = bool(self.base_url and 'openai.azure.com' in self.base_url)
+    is_azure = bool(is_azure_flag or azure_by_url)
     self._is_azure = is_azure
+
     if is_azure:
-      # Use AzureOpenAI client with proper parameters
-      azure_endpoint = self.base_url or (
-          _os.environ.get('AZURE_OPENAI_ENDPOINT') if _os else None
-      )
-      api_ver = self.api_version or (
-          (_os.environ.get('AZURE_OPENAI_API_VERSION') if _os else None)
-      )
-      if not azure_endpoint:
+      if not self.base_url:
         raise exceptions.InferenceConfigError('Azure endpoint not provided.')
-      if not api_ver:
+      if not self.api_version:
         raise exceptions.InferenceConfigError('Azure API version not provided.')
-      # 记录以供 REST 路径使用
-      self._azure_endpoint = azure_endpoint.rstrip('/')
-      self._api_version = api_ver
-      # 为确保使用带 api-version 的部署级 REST 路径，这里不初始化 SDK 客户端，统一走 REST
+      # Use REST helper for Azure; do not init SDK client
       self._client = None
     else:
       client_kwargs: dict[str, Any] = {
@@ -301,7 +240,7 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
         api_params['extra_body'] = extra_body
 
       if self._is_azure:
-        # 统一走 Azure 部署级 REST，保证携带 api-version
+        # Azure REST path
         response = self._azure_chat_completion_http(api_params)
       else:
         response = self._client.chat.completions.create(**api_params)
@@ -408,7 +347,7 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
     except Exception as e:  # pragma: no cover
       raise exceptions.InferenceRuntimeError('requests not installed') from e
 
-    if not self._azure_endpoint or not self._api_version:
+    if not self.base_url or not self.api_version:
       raise exceptions.InferenceConfigError(
           'Azure endpoint/api-version not set'
       )
@@ -417,8 +356,8 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
     if not deployment:
       raise exceptions.InferenceConfigError('Azure deployment (model) not set')
 
-    url = f'{self._azure_endpoint}/openai/deployments/{deployment}/chat/completions'
-    params = {'api-version': self._api_version}
+    url = f'{self.base_url}/openai/deployments/{deployment}/chat/completions'
+    params = {'api-version': self.api_version}
     headers = {
         'Content-Type': 'application/json',
         'api-key': self.api_key,
@@ -442,25 +381,29 @@ class OpenAILanguageModel(base_model.BaseLanguageModel):
       raise exceptions.InferenceRuntimeError(
           f'Azure REST error {resp.status_code}: {resp.text}'
       )
-    data = resp.json()
+    resp_json = resp.json()
 
     # 适配到 openai v1 响应对象的最小字段
     class _Msg:
-      
+
       def __init__(self, content):
         self.content = content
+
     class _Choice:
-      
+
       def __init__(self, content):
         self.message = _Msg(content)
+
     class _Resp:
-      
+
       def __init__(self, content):
         self.choices = [_Choice(content)]
 
     first = ''
     try:
-      first = data['choices'][0]['message']['content']
+      first = resp_json['choices'][0]['message']['content']
     except Exception:
       first = ''
     return _Resp(first)
+
+
